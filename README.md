@@ -18,11 +18,11 @@ store.js
 import { ctx } from '@morain/ctx';
 
 ctx.use('global', {
-  hobbies: {
-    name: {
-      smallName: 'default name',
-    },
-  },
+  name: 'name',
+});
+
+ctx.use('page', {
+  pageName: 'name',
 });
 ```
 
@@ -39,13 +39,16 @@ export default function App() {
     console.log('Clicked!');
   };
 
-  const name = useCtxData('global:hobbies.name.smallName');
+  const globalData = useCtxData('name');
+  const pageName = useCtxData('page:name');
+
   useCtxEvent('click', handleClick);
 
   return (
     <div>
-      {name}
-      <button onClick={() => global.data.hobbies.name.smallName = 'Hello World'}Click Me</button>
+      {globalData}
+      {pageName}
+      <button onClick={() => global.data.name = 'Hello World'}Click Me</button>
     </div>
 
 ```
