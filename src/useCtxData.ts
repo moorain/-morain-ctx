@@ -13,14 +13,18 @@ function getValueFromKeys(obj: any, keys: string[]): unknown {
 }
 
 export default <T = any>(spaceString: string) => {
-  if (!pattern.test(spaceString) || typeof spaceString !== 'string') {
-    // 如果传入的参数不符合规范，抛出错误
+  let str = spaceString;
+
+  if (typeof str === 'string' && str.indexOf(':') < 0) {
+    str = `global:${str}`;
+  }
+
+  if (!pattern.test(str) || typeof str !== 'string') {
     throw new Error('useCtx: 传入的参数不符合规范');
   }
 
-  const [nameSpace, codeString] = spaceString.split(':');
+  const [nameSpace, codeString] = str.split(':');
 
-  //获取代理实例
   const ctx = instance.getContext(nameSpace);
 
   if (!ctx) {

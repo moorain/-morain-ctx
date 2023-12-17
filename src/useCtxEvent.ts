@@ -1,20 +1,17 @@
 import React, { useEffect } from 'react';
-import instance from './ctx';
+import ctx from './ctx';
 
 export default (nameString: string, callback?: any) => {
-  const [nameSpace, code] = nameString.split(':');
-  const ctx = instance.getContext(nameSpace);
-
   useEffect(() => {
     if (callback) {
-      ctx.listen(code, callback);
+      ctx.listen(nameString, callback);
       return () => {
-        ctx.remove(code, callback);
+        ctx.remove(nameString, callback);
       };
     }
   }, []);
 
   return (params?: any) => {
-    ctx.run(code, params);
+    ctx.run(nameString, params);
   };
 };

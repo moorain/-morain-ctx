@@ -1,39 +1,48 @@
 type EventListener = Record<string | symbol, Function[]>;
 
-type DefaultData = {
-  [key: string]: any;
-};
-
 type Prop = string | symbol;
+type Callback = (res?: any) => void;
 
-export type CtxInstance = {
-  data: any;
-  get: (code: string) => any;
-  set: (code: string, value: any) => void;
+export type CtxInstance<T> = {
+  data: T;
   run: (code: string, params: any) => void;
-  on: (code: string, callback: Function) => void;
-  off: (code: string, callback: Function) => void;
-  listen: (code: string, callback: Function) => void;
-  remove: (code: string, callback: Function) => void;
-  once: (code: string, callback: (next: any) => void) => void;
+  listen: (code: string, callback: Callback) => void;
+  remove: (code: string, callback: Callback) => void;
+  on: (code: string, callback: Callback) => void;
+  off: (code: string, callback: Callback) => void;
 };
 
 class Context {
-  private data: any;
-  private events: Record<string, EventListener>;
-  private functionEvents: Record<string, any>;
-  private onceRunning: Record<string, any>;
-  private context: any;
+  private _data: any;
+  private _events: Record<string, EventListener>;
+  private _functionEvents: Record<string, any>;
+  private _onceRunning: Record<string, any>;
+  private _context: Record<string, CtxInstance<any>>;
+  [key: string]: any;
 
   constructor() {
-    this.events = {};
-    this.functionEvents = {};
-    this.data = {};
-    this.onceRunning = {};
-    this.context = {};
+    this._events = {};
+    this._functionEvents = {};
+    this._data = {};
+    this._onceRunning = {};
+    this._context = {};
+    this.use('global', { key: 'globalState' });
   }
 
-  private setupProxy(nameSpace: string, defaultData?: DefaultData) {
+  private _getNameSpace(spaceString: string) {
+    if (typeof spaceString === 'string') {
+      if (spaceString.indexOf(':') > -1) {
+        const [name, code] = spaceString.split(':');
+        return { name, code };
+      } else {
+        return { name: 'global', code: spaceString };
+      }
+    } else {
+      throw new Error('nameSpace must be string');
+    }
+  }
+
+  private _setupProxy(nameSpace: string, defaultData: any) {
     const that = this;
     const handler: ProxyHandler<any> = {
       get(target, prop) {
@@ -49,63 +58,60 @@ class Context {
         return true;
       },
     };
-    this.data[nameSpace] = new Proxy({ ...defaultData }, handler);
+    this._data[nameSpace] = new Proxy({ ...defaultData }, handler);
   }
 
-  use(nameSpace: string, defaultData?: any) {
-    if (nameSpace) {
-      this.setupProxy(nameSpace, defaultData);
-      this.events[nameSpace] = {};
-      this.functionEvents[nameSpace] = {};
-      this.onceRunning[nameSpace] = {};
-      const context = {
-        data: this.data[nameSpace],
-        get: (code: string) => {
-          return this.data[nameSpace][code];
-        },
-        set: (code: string, value: any) => {
-          this.data[nameSpace][code] = value;
-        },
+  private _isValidNamespace(nameSpace: string) {
+    return typeof nameSpace === 'string';
+  }
+
+  public use<T>(nameSpace: string, defaultData: T) {
+    if (this._isValidNamespace(nameSpace) && !this._context[nameSpace]) {
+      this._setupProxy(nameSpace, defaultData);
+      this._events[nameSpace] = {};
+      this._functionEvents[nameSpace] = {};
+      this._onceRunning[nameSpace] = {};
+
+      const context: CtxInstance<T> = {
+        data: this._data[nameSpace] as T,
         run: (code: string, params: any) => {
-          this._run(nameSpace, code, params);
+          this.run(`${nameSpace}:${code}`, params);
         },
-        on: (code: string, callback: Function) => {
-          this._on(nameSpace, code, callback);
+        listen: (code: string, callback: Callback) => {
+          this.listen(`${nameSpace}:${code}`, callback);
         },
-        off: (code: string, callback: Function) => {
-          this._off(nameSpace, code, callback);
+        remove: (code: string, callback: Callback) => {
+          this.remove(`${nameSpace}:${code}`, callback);
         },
-        listen: (code: string, callback: Function) => {
-          this._listen(nameSpace, code, callback);
+        on: (code: string, callback: Callback) => {
+          this.on(`${nameSpace}:${code}`, callback);
         },
-        remove: (code: string, callback: Function) => {
-          this._remove(nameSpace, code, callback);
-        },
-        once: (code: string, callback: (next: any) => void) => {
-          if (this.onceRunning[nameSpace][code] !== 'running') {
-            this.onceRunning[nameSpace][code] = 'running';
-            if (typeof callback === 'function') {
-              callback(() => {
-                this.onceRunning[nameSpace][code] = 'waitingNext';
-              });
-            }
-          }
+        off: (code: string, callback: Callback) => {
+          this.off(`${nameSpace}:${code}`, callback);
         },
       };
-      this.context[nameSpace] = context;
+
+      this._context[nameSpace] = context;
+
+      // 动态添加新的访问器
+      Object.defineProperty(Context.prototype, nameSpace, {
+        get() {
+          return this._data[nameSpace] as T;
+        },
+        enumerable: true,
+        configurable: true,
+      });
+    } else {
+      throw new Error('Invalid namespace or namespace already exists!');
     }
   }
 
-  getContext(nameSpace: string) {
-    return this.context[nameSpace] as CtxInstance;
-  }
-
   private _getListeners(nameSpace: string, code: Prop) {
-    return this.events[nameSpace][code];
+    return this._events[nameSpace][code];
   }
 
   private _getEventListeners(nameSpace: string, code: Prop) {
-    return this.functionEvents[nameSpace][code];
+    return this._functionEvents[nameSpace][code];
   }
 
   private _triggerChange(nameSpace: string, prop: Prop, value: any) {
@@ -117,8 +123,37 @@ class Context {
     }
   }
 
-  private _run(nameSpace: string, code: string, params: any) {
-    const listener = this._getEventListeners(nameSpace, code);
+  public destroy() {
+    this._events = null as any;
+    this._functionEvents = null as any;
+    this._data = null as any;
+    this._onceRunning = null as any;
+    this._context = null as any;
+  }
+
+  public getContext<T = any>(nameSpace: string) {
+    return this._context[nameSpace] as CtxInstance<T>;
+  }
+
+  public data(nameSpace = 'global') {
+    return this._data[nameSpace];
+  }
+
+  public once(nameString: string, callback: (next: any) => void) {
+    const { name, code } = this._getNameSpace(nameString);
+    if (this._onceRunning[name][code] !== 'running') {
+      this._onceRunning[name][code] = 'running';
+      if (typeof callback === 'function') {
+        callback(() => {
+          this._onceRunning[name][code] = 'waitingNext';
+        });
+      }
+    }
+  }
+
+  public run(nameString: string, params: any) {
+    const { name, code } = this._getNameSpace(nameString);
+    const listener = this._getEventListeners(name, code);
     if (listener) {
       listener.forEach((callback: any) => {
         callback(params);
@@ -126,17 +161,20 @@ class Context {
     }
   }
 
-  private _on(nameSpace: string, code: Prop, callback: Function) {
-    const listener = this._getListeners(nameSpace, code);
+  public on(nameString: string, callback: Callback) {
+    const { name, code } = this._getNameSpace(nameString);
+    const listener = this._getListeners(name, code);
     if (listener) {
       listener.push(callback);
     } else {
-      this.events[nameSpace][code] = [callback];
+      this._events[name][code] = [callback];
     }
   }
 
-  private _off(nameSpace: string, code: string, callback: Function) {
-    const listeners = this._getListeners(nameSpace, code);
+  public off(nameString: string, callback: Callback) {
+    const { name, code } = this._getNameSpace(nameString);
+    const listeners = this._getListeners(name, code);
+
     if (listeners) {
       const index = listeners.indexOf(callback);
       if (index > -1) {
@@ -145,17 +183,19 @@ class Context {
     }
   }
 
-  private _listen(nameSpace: string, code: string, callback: Function) {
-    const eventListener = this._getEventListeners(nameSpace, code);
+  public listen(nameString: string, callback: Callback) {
+    const { name, code } = this._getNameSpace(nameString);
+    const eventListener = this._getEventListeners(name, code);
     if (eventListener) {
       eventListener.push(callback);
     } else {
-      this.functionEvents[nameSpace][code] = [callback];
+      this._functionEvents[name][code] = [callback];
     }
   }
 
-  private _remove(nameSpace: string, code: string, callback: Function) {
-    const listeners = this._getEventListeners(nameSpace, code);
+  public remove(nameString: string, callback: Callback) {
+    const { name, code } = this._getNameSpace(nameString);
+    const listeners = this._getEventListeners(name, code);
     if (listeners) {
       const index = listeners.indexOf(callback);
       if (index > -1) {

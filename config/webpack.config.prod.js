@@ -1,7 +1,7 @@
 const path = require('path');
 const { merge } = require('webpack-merge');
 const { CleanWebpackPlugin } = require('clean-webpack-plugin');
-
+const TerserPlugin = require('terser-webpack-plugin');
 const baseConfig = require('./webpack.config.base.js'); // 引用公共的配置
 
 const prodConfig = {
@@ -15,6 +15,18 @@ const prodConfig = {
   plugins: [new CleanWebpackPlugin()],
   optimization: {
     minimize: true,
+    minimizer: [
+      new TerserPlugin({
+        terserOptions: {
+          compress: {
+            drop_console: true, // 去除 console
+          },
+          output: {
+            comments: false, // 去除注释
+          },
+        },
+      }),
+    ],
   },
   externals: {
     // 外部依赖

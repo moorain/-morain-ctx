@@ -1,31 +1,35 @@
-export type CtxInstance = {
-    data: any;
-    get: (code: string) => any;
-    set: (code: string, value: any) => void;
+type Callback = (res?: any) => void;
+export type CtxInstance<T> = {
+    data: T;
     run: (code: string, params: any) => void;
-    on: (code: string, callback: Function) => void;
-    off: (code: string, callback: Function) => void;
-    listen: (code: string, callback: Function) => void;
-    remove: (code: string, callback: Function) => void;
-    once: (code: string, callback: (next: any) => void) => void;
+    listen: (code: string, callback: Callback) => void;
+    remove: (code: string, callback: Callback) => void;
+    on: (code: string, callback: Callback) => void;
+    off: (code: string, callback: Callback) => void;
 };
 declare class Context {
-    private data;
-    private events;
-    private functionEvents;
-    private onceRunning;
-    private context;
+    private _data;
+    private _events;
+    private _functionEvents;
+    private _onceRunning;
+    private _context;
+    [key: string]: any;
     constructor();
-    private setupProxy;
-    use(nameSpace: string, defaultData?: any): void;
-    getContext(nameSpace: string): CtxInstance;
+    private _getNameSpace;
+    private _setupProxy;
+    private _isValidNamespace;
+    use<T>(nameSpace: string, defaultData: T): void;
     private _getListeners;
     private _getEventListeners;
     private _triggerChange;
-    private _run;
-    private _on;
-    private _off;
-    private _listen;
-    private _remove;
+    destroy(): void;
+    getContext<T = any>(nameSpace: string): CtxInstance<T>;
+    data(nameSpace?: string): any;
+    once(nameString: string, callback: (next: any) => void): void;
+    run(nameString: string, params: any): void;
+    on(nameString: string, callback: Callback): void;
+    off(nameString: string, callback: Callback): void;
+    listen(nameString: string, callback: Callback): void;
+    remove(nameString: string, callback: Callback): void;
 }
 export default Context;
